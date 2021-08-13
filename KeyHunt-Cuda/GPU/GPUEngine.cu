@@ -637,11 +637,11 @@ bool GPUEngine::SetKeys(Point* p)
 	// Fill device memory
 	CudaSafeCall(cudaMemcpy(inputKey, inputKeyPinned, nbThread * 32 * 2, cudaMemcpyHostToDevice));
 
-	if (!rKey) {
-		// We do not need the input pinned memory anymore
-		CudaSafeCall(cudaFreeHost(inputKeyPinned));
-		inputKeyPinned = NULL;
-	}
+//	if (!rKey) {
+//		// We do not need the input pinned memory anymore
+//		CudaSafeCall(cudaFreeHost(inputKeyPinned));
+//		inputKeyPinned = NULL;
+//	}
 
 	switch (searchMode) {
 	case (int)SEARCH_MODE_MA:

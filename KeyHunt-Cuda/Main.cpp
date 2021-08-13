@@ -225,6 +225,11 @@ int main(int argc, char** argv)
 	rangeStart.SetInt32(0);
 	rangeEnd.SetInt32(0);
 
+	Int jump;
+	Int chunk;
+	jump.SetInt32(0);
+	chunk.SetInt32(0);
+
 	int searchMode = 0;
 	int coinType = COIN_BTC;
 
@@ -248,6 +253,8 @@ int main(int argc, char** argv)
 	parser.add("", "--range", true);
 	parser.add("-r", "--rkey", true);
 	parser.add("-v", "--version", false);
+    parser.add("", "--jump", true);
+    parser.add("", "--chunk", true);
 
 	if (argc == 1) {
 		usage();
@@ -337,6 +344,12 @@ int main(int argc, char** argv)
 			else if (optArg.equals("-r", "--rkey")) {
 				rKey = std::stoull(optArg.arg);
 			}
+            else if (optArg.equals("", "--jump")) {
+                jump.SetBase10(optArg.arg.c_str());
+            }
+            else if (optArg.equals("", "--chunk")) {
+                chunk.SetBase10(optArg.arg.c_str());
+            }
 			else if (optArg.equals("-v", "--version")) {
 				printf("KeyHunt-Cuda v" RELEASE "\n");
 				return 0;
@@ -596,11 +609,13 @@ int main(int argc, char** argv)
 	case (int)SEARCH_MODE_MX:
 		v = new KeyHunt(inputFile, compMode, searchMode, coinType, gpuEnable, outputFile, useSSE,
 			maxFound, rKey, rangeStart.GetBase16(), rangeEnd.GetBase16(), should_exit);
+		v->setJumps(jump, chunk);
 		break;
 	case (int)SEARCH_MODE_SA:
 	case (int)SEARCH_MODE_SX:
 		v = new KeyHunt(hashORxpoint, compMode, searchMode, coinType, gpuEnable, outputFile, useSSE,
 			maxFound, rKey, rangeStart.GetBase16(), rangeEnd.GetBase16(), should_exit);
+		v->setJumps(jump, chunk);
 		break;
 	default:
 		printf("\n\nNothing to do, exiting\n");

@@ -545,14 +545,11 @@ void KeyHunt::checkSingleAddressesSSE(bool compressed, Int key, int i, Point p1,
 
 // ----------------------------------------------------------------------------
 
-void KeyHunt::getCPUStartingKey(Int & tRangeStart, Int & tRangeEnd, Int & key, Point & startP)
+void KeyHunt::getCPUStartingKey(Int & tRangeStart, Int & tRangeEnd, Int & key, Point & startP, bool isJump)
 {
-	if (rKey <= 0) {
-		key.Set(&tRangeStart);
-	}
-	else {
-		key.Rand(&tRangeEnd);
-	}
+    key.Set(&tRangeStart);
+    key.Add((uint64_t&) Chunk);
+
 	Int km(&key);
 	km.Add((uint64_t)CPU_GRP_SIZE / 2);
 	startP = secp->ComputePublicKey(&km);
@@ -806,7 +803,7 @@ void KeyHunt::FindKeyCPU(TH_PARAM * ph)
 				}
 			}
 		}
-		key.Add((uint64_t)CPU_GRP_SIZE);
+		key.Add((uint64_t) (CPU_GRP_SIZE * nbCPUThread));
 		counters[thId] += CPU_GRP_SIZE; // Point
 	}
 	ph->isRunning = false;
@@ -825,45 +822,26 @@ void KeyHunt::FindKeyCPU(TH_PARAM * ph)
 
 // ----------------------------------------------------------------------------
 
-void KeyHunt::getGPUStartingKeys(Int & tRangeStart, Int & tRangeEnd, int groupSize, int nbThread, Int * keys, Point * p)
+void KeyHunt::getGPUStartingKeys(Int & tRangeStart, Int & tRangeEnd, int groupSize, int nbThread, Int * keys, Point * p, bool isJump)
 {
-
-	Int tRangeDiff(tRangeEnd);
-	Int tRangeStart2(tRangeStart);
-	Int tRangeEnd2(tRangeStart);
-
-	Int tThreads;
-	tThreads.SetInt32(nbThread);
-	tRangeDiff.Set(&tRangeEnd);
-	tRangeDiff.Sub(&tRangeStart);
-	tRangeDiff.Div(&tThreads);
-
-	int rangeShowThreasold = 3;
-	int rangeShowCounter = 0;
-
+    if (isJump) {
+        tRangeStart.Add((uint64_t&) Chunk);
+    }
 	for (int i = 0; i < nbThread; i++) {
-
-		tRangeEnd2.Set(&tRangeStart2);
-		tRangeEnd2.Add(&tRangeDiff);
-
-		if (rKey <= 0)
-			keys[i].Set(&tRangeStart2);
-		else
-			keys[i].Rand(&tRangeEnd2);
-
-		tRangeStart2.Add(&tRangeDiff);
+        keys[i].Set(&tRangeStart);
+        tRangeStart.Add((uint64_t) (STEP_SIZE));
 
 		Int k(keys + i);
 		k.Add((uint64_t)(groupSize / 2));	// Starting key is at the middle of the group
 		p[i] = secp->ComputePublicKey(&k);
 	}
-
 }
 
 void KeyHunt::FindKeyGPU(TH_PARAM * ph)
 {
 
 	bool ok = true;
+	uint64_t stepper = 0;
 
 #ifdef WITHGPU
 
@@ -913,9 +891,10 @@ void KeyHunt::FindKeyGPU(TH_PARAM * ph)
 	while (ok && !endOfSearch) {
 
 		if (ph->rKeyRequest) {
-			getGPUStartingKeys(tRangeStart, tRangeEnd, g->GetGroupSize(), nbThread, keys, p);
+			getGPUStartingKeys(tRangeStart, tRangeEnd, g->GetGroupSize(), nbThread, keys, p, true);
 			ok = g->SetKeys(p);
 			ph->rKeyRequest = false;
+            std::cout << std::endl << tRangeStart.GetBase16().c_str() << std::endl << tRangeEnd.GetBase16().c_str() << std::endl;
 		}
 
 		// Call kernel
@@ -986,11 +965,10 @@ void KeyHunt::FindKeyGPU(TH_PARAM * ph)
 
 		if (ok) {
 			for (int i = 0; i < nbThread; i++) {
-				keys[i].Add((uint64_t)STEP_SIZE);
+				keys[i].Add((uint64_t)(STEP_SIZE * nbThread));
 			}
 			counters[thId] += (uint64_t)(STEP_SIZE)*nbThread; // Point
 		}
-
 	}
 
 	delete[] keys;
@@ -1050,7 +1028,6 @@ uint64_t KeyHunt::getGPUCount()
 
 uint64_t KeyHunt::getCPUCount()
 {
-
 	uint64_t count = 0;
 	for (int i = 0; i < nbCPUThread; i++)
 		count += counters[i];
@@ -1089,6 +1066,7 @@ void KeyHunt::Search(int nbThread, std::vector<int> gpuId, std::vector<int> grid
 	nbCPUThread = nbThread;
 	nbGPUThread = (useGpu ? (int)gpuId.size() : 0);
 	nbFoundKey = 0;
+	std::string st = this->Chunk.GetBase10().c_str();
 
 	// setup ranges
 	SetupRanges(nbCPUThread + nbGPUThread);
@@ -1108,8 +1086,8 @@ void KeyHunt::Search(int nbThread, std::vector<int> gpuId, std::vector<int> grid
 		params[i].isRunning = true;
 
 		params[i].rangeStart.Set(&rangeStart);
-		rangeStart.Add(&rangeDiff);
-		params[i].rangeEnd.Set(&rangeStart);
+		rangeStart.Add(uint64_t (CPU_GRP_SIZE * i));
+
 
 #ifdef WIN64
 		DWORD thread_id;
@@ -1132,8 +1110,9 @@ void KeyHunt::Search(int nbThread, std::vector<int> gpuId, std::vector<int> grid
 		params[nbCPUThread + i].gridSizeY = gridSize[2 * i + 1];
 
 		params[nbCPUThread + i].rangeStart.Set(&rangeStart);
-		rangeStart.Add(&rangeDiff);
-		params[nbCPUThread + i].rangeEnd.Set(&rangeStart);
+		rangeStart.Add((uint64_t)(STEP_SIZE * i));
+		//rangeStart.Add(&rangeDiff);
+		params[nbCPUThread + i].rangeEnd.Set(&rangeEnd);
 
 
 #ifdef WIN64
@@ -1176,7 +1155,8 @@ void KeyHunt::Search(int nbThread, std::vector<int> gpuId, std::vector<int> grid
 	Timer::Init();
 	t0 = Timer::get_tick();
 	startTime = t0;
-	Int p100;
+	Int p100, lastJump, tmp;
+	lastJump.SetInt32(0);
 	Int ICount;
 	p100.SetInt32(100);
 	double completedPerc = 0;
@@ -1237,6 +1217,16 @@ void KeyHunt::Search(int nbThread, std::vector<int> gpuId, std::vector<int> grid
 				lastrKey = count;
 				rKeyCount++;
 			}
+		}
+
+		if (!Jump.IsZero() && !Chunk.IsZero()) {
+		    tmp.SetInt64(count);
+		    tmp.Sub(&lastJump);
+		    if (tmp.IsGreaterOrEqual(&Jump)) {
+                rKeyRequest(params);
+                rKeyCount++;
+                lastJump.Add(count);
+            }
 		}
 
 		lastCount = count;

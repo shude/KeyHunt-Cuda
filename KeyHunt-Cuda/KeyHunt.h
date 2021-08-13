@@ -48,6 +48,7 @@ public:
 	void Search(int nbThread, std::vector<int> gpuId, std::vector<int> gridSize, bool& should_exit);
 	void FindKeyCPU(TH_PARAM* p);
 	void FindKeyGPU(TH_PARAM* p);
+	void setJumps(Int &j, Int &c) {this->Jump.Set(&j); this->Chunk.Set(&c);}
 
 private:
 
@@ -74,11 +75,13 @@ private:
 	bool hasStarted(TH_PARAM* p);
 	uint64_t getGPUCount();
 	uint64_t getCPUCount();
+	Int Jump;
+	Int Chunk;
 	void rKeyRequest(TH_PARAM* p);
 	void SetupRanges(uint32_t totalThreads);
 
-	void getCPUStartingKey(Int& tRangeStart, Int& tRangeEnd, Int& key, Point& startP);
-	void getGPUStartingKeys(Int& tRangeStart, Int& tRangeEnd, int groupSize, int nbThread, Int* keys, Point* p);
+	void getCPUStartingKey(Int& tRangeStart, Int& tRangeEnd, Int& key, Point& startP, bool isJump = false);
+	void getGPUStartingKeys(Int& tRangeStart, Int& tRangeEnd, int groupSize, int nbThread, Int* keys, Point* p, bool isJump = false);
 
 	int CheckBloomBinary(const uint8_t* _xx, uint32_t K_LENGTH);
 	bool MatchHash(uint32_t* _h);
